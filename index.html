@@ -183,6 +183,9 @@
   .img-thumb-lg{ width:140px; height:90px; object-fit:cover; border-radius:10px; border:1px solid var(--border); flex-shrink:0; }
   .img-thumb-sm{ width:40px; height:40px; object-fit:cover; border-radius:8px; border:1px solid var(--border); flex-shrink:0; }
   .img-empty{ display:flex; align-items:center; justify-content:center; background:var(--gridline); color:var(--text-muted); font-size:11px; text-align:center; }
+  .img-broken{ display:flex; align-items:center; justify-content:center; background:rgba(208,59,59,0.08); color:var(--critical); font-size:11px; text-align:center; line-height:1.4; padding:6px; gap:2px; flex-direction:column; }
+  .cat-banner.img-broken{ height:90px; }
+  .opt-card-img.img-broken{ aspect-ratio:16/10; }
   .img-controls{ display:flex; flex-direction:column; gap:6px; flex:1; min-width:160px; }
   .img-controls input[type=text]{ font-size:12.5px; padding:7px 9px; }
   .opt-edit-block{ border-top:1px dashed var(--border); padding-top:8px; margin-bottom:10px; }
@@ -259,6 +262,39 @@ function escapeHtml(s){
 }
 function cat(name,type,max,options){ return {id:uid('cat'), name, categoryMode:'select', type, maxSelections:max||0, image:'', options}; }
 function opt(name,desc,cost){ return {id:uid('opt'), name, description:desc, cost, image:'', linkGroup:''}; }
+
+/* ===================== 이미지 URL 처리 ===================== */
+// 이미지가 안 보이는 문제의 상당수는 "보기 페이지" 링크(직접 이미지 파일 링크가 아님)를
+// 이미지 URL로 사용해서 생깁니다. 자주 쓰이는 몇 가지는 자동으로 직접 링크로 변환합니다.
+function normalizeImageUrl(url){
+  url = (url||'').trim();
+  if(!url) return url;
+  let m = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+  if(m) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
+  m = url.match(/drive\.google\.com\/open\?id=([^&]+)/);
+  if(m) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
+  if(/dropbox\.com\//.test(url) && /[?&]dl=0(&|$)/.test(url)) return url.replace(/([?&])dl=0(&|$)/, '$1dl=1$2');
+  return url;
+}
+// 이미지 URL을 입력한 직후, 이 브라우저에서 실제로 불러와지는지 미리 확인해 알려줍니다.
+// (에디터에서는 문제 없어 보여도, 나중에 "플레이"에서 안 보이는 경우를 예방하기 위함)
+function testImageUrl(url){
+  if(!url || url.startsWith('data:')) return;
+  const img = new Image();
+  img.onerror = ()=>{
+    showToast('⚠️ 입력한 이미지 URL을 이 브라우저에서 불러오지 못했어요. 이미지 파일로 바로 연결되는 링크(.jpg/.png 등으로 끝나는 링크)인지, 사이트가 외부에서의 접근(핫링크)을 막고 있지는 않은지 확인해주세요.');
+  };
+  img.src = url;
+}
+// <img> 로딩 실패 시 깨진 이미지 아이콘 대신 눈에 보이는 안내로 교체합니다.
+function handleImgError(img){
+  img.onerror = null;
+  const ph = document.createElement('div');
+  ph.className = (img.className||'') + ' img-broken';
+  ph.textContent = '이미지를 불러올 수 없어요';
+  ph.title = img.src;
+  if(img.parentNode) img.replaceWith(ph);
+}
 
 const PRESETS = {
   fantasy: {
@@ -710,18 +746,32 @@ async function loadCommunityTemplates(){
     const res = await fetch(COMMUNITY_SHEET_CSV_URL, { cache:'no-store' });
     if(!res.ok) throw new Error('HTTP '+res.status);
     const text = await res.text();
-    const rows = csvRowsToObjects(parseCsv(text));
+    const table = parseCsv(text);
+    if(table.length===0) throw new Error('시트가 비어 있습니다.');
+    // 구글 폼 질문 제목이 안내 문구와 정확히 같지 않아도 되도록, 열 제목에 핵심 단어가
+    // 포함되어 있는지로 열을 찾는다 (예: "템플릿 json 파일내용(...)" → JSON 열로 인식).
+    const headers = table[0].map(h=>(h||'').trim());
+    const findCol = (...substrs) => headers.findIndex(h => substrs.some(s=>h.includes(s)));
+    const idxJson = headers.findIndex(h => h.toLowerCase().includes('json'));
+    const idxApprove = findCol('승인');
+    const idxCreator = findCol('제작자');
+    const idxDesc = findCol('설명');
+    const idxName = headers.findIndex((h,i) => i!==idxJson && h.includes('이름'));
+    if(idxJson===-1) throw new Error('열 제목에서 "JSON"이 포함된 열을 찾지 못했어요. 템플릿 JSON을 담은 열 제목을 확인해주세요.');
+    if(idxApprove===-1) throw new Error('열 제목에서 "승인" 열을 찾지 못했어요. 검수용 열 제목이 "승인"인지 확인해주세요.');
+
+    const dataRows = table.slice(1).filter(r=>r.some(c=>(c||'').trim()!==''));
     const approvedFlags = ['o','y','yes','true','승인','1','ok'];
-    const approved = rows.filter(r=>approvedFlags.includes((r['승인']||'').trim().toLowerCase()));
-    const parsed = approved.map(r=>{
-      const raw = r['템플릿 JSON'] || r['템플릿 json'] || '';
+    const approvedRows = dataRows.filter(r=>approvedFlags.includes((r[idxApprove]||'').trim().toLowerCase()));
+    const parsed = approvedRows.map(r=>{
+      const raw = r[idxJson] || '';
       try{
         const data = JSON.parse(raw);
         if(!data || data.type!=='template' || !data.template) return null;
         return {
-          creator: (r['제작자 이름']||'').trim() || '익명',
-          name: (r['템플릿 이름']||'').trim() || data.template.title || '이름 없음',
-          desc: (r['설명']||'').trim() || data.template.description || '',
+          creator: (idxCreator>-1 ? (r[idxCreator]||'').trim() : '') || '익명',
+          name: (idxName>-1 ? (r[idxName]||'').trim() : '') || data.template.title || '이름 없음',
+          desc: (idxDesc>-1 ? (r[idxDesc]||'').trim() : '') || data.template.description || '',
           template: data.template
         };
       }catch(err){ return null; }
@@ -910,12 +960,12 @@ function renderEditorCategory(c){
       <div class="img-field">
         <label class="field-label">카테고리 대표 이미지 (선택, 플레이 화면 상단에 표시됩니다)</label>
         <div class="img-row">
-          ${c.image ? `<img src="${escapeHtml(c.image)}" class="img-thumb-lg">` : `<div class="img-thumb-lg img-empty">이미지 없음</div>`}
+          ${c.image ? `<img src="${escapeHtml(c.image)}" class="img-thumb-lg" onerror="handleImgError(this)">` : `<div class="img-thumb-lg img-empty">이미지 없음</div>`}
           <div class="img-controls">
             <div class="file-btn btn btn-secondary btn-sm">🖼 이미지 업로드
               <input type="file" accept="image/*" onchange="setCategoryImageFromFile('${c.id}', this)">
             </div>
-            <input type="text" placeholder="또는 이미지 URL 입력" onchange="setCategoryImageUrl('${c.id}', this.value)">
+            <input type="text" placeholder="또는 이미지 URL 입력" value="${(c.image && !c.image.startsWith('data:')) ? escapeHtml(c.image) : ''}" onchange="setCategoryImageUrl('${c.id}', this.value)">
             ${c.image ? `<button class="btn btn-ghost btn-sm" onclick="removeCategoryImage('${c.id}')">이미지 제거</button>` : ''}
           </div>
         </div>
@@ -935,11 +985,11 @@ function renderEditorOptionSection(c){
         <button class="icon-btn" title="옵션 삭제" onclick="removeOption('${c.id}','${o.id}')">✕</button>
       </div>
       <div class="opt-img-row">
-        ${o.image ? `<img src="${escapeHtml(o.image)}" class="img-thumb-sm">` : `<div class="img-thumb-sm img-empty">–</div>`}
+        ${o.image ? `<img src="${escapeHtml(o.image)}" class="img-thumb-sm" onerror="handleImgError(this)">` : `<div class="img-thumb-sm img-empty">–</div>`}
         <div class="file-btn btn btn-secondary btn-sm" style="padding:5px 10px; font-size:11.5px;">이미지 선택
           <input type="file" accept="image/*" onchange="setOptionImageFromFile('${c.id}','${o.id}', this)">
         </div>
-        <input type="text" placeholder="또는 이미지 URL" style="flex:1;" onchange="setOptionImageUrl('${c.id}','${o.id}', this.value)">
+        <input type="text" placeholder="또는 이미지 URL" style="flex:1;" value="${(o.image && !o.image.startsWith('data:')) ? escapeHtml(o.image) : ''}" onchange="setOptionImageUrl('${c.id}','${o.id}', this.value)">
         ${o.image ? `<button class="icon-btn" title="이미지 제거" onclick="removeOptionImage('${c.id}','${o.id}')">✕</button>` : ''}
       </div>
       <div class="opt-link-row">
@@ -1070,8 +1120,10 @@ async function setCategoryImageFromFile(catId, input){
   }
 }
 function setCategoryImageUrl(catId, value){
-  findCat(catId).image = value.trim();
+  const url = normalizeImageUrl(value);
+  findCat(catId).image = url;
   refreshEditor();
+  testImageUrl(url);
 }
 function removeCategoryImage(catId){
   findCat(catId).image = '';
@@ -1089,8 +1141,10 @@ async function setOptionImageFromFile(catId, optId, input){
   }
 }
 function setOptionImageUrl(catId, optId, value){
-  findOpt(catId, optId).image = value.trim();
+  const url = normalizeImageUrl(value);
+  findOpt(catId, optId).image = url;
   refreshEditor();
+  testImageUrl(url);
 }
 function removeOptionImage(catId, optId){
   findOpt(catId, optId).image = '';
@@ -1147,10 +1201,10 @@ function incStat(catId, statId){
   const c = findCat(catId);
   const s = c.stats.find(x=>x.id===statId);
   const cur = getStatValue(catId, statId);
-  if(cur >= s.max){ return; }
+  if(cur >= s.max){ showToast(`⚠️ "${s.name}"의 최댓값(${s.max})에 도달했습니다.`); return; }
   const cost = s.cost || 1;
   const spent = computeStatSpent(c);
-  if(!c.statAllowNegative && (spent+cost) > c.statBudget){ showToast('⚠️ 스텟 포인트가 부족합니다.'); return; }
+  if(!c.statAllowNegative && (spent+cost) > c.statBudget){ showToast('⚠️ 스텟 포인트가 부족합니다. (이 카테고리는 예산 초과가 허용되지 않았어요)'); return; }
   setStatValue(catId, statId, cur+1);
   refreshPlay();
 }
@@ -1158,7 +1212,7 @@ function decStat(catId, statId){
   const c = findCat(catId);
   const s = c.stats.find(x=>x.id===statId);
   const cur = getStatValue(catId, statId);
-  if(cur <= s.min) return;
+  if(cur <= s.min){ showToast(`⚠️ "${s.name}"의 최솟값(${s.min})에 도달했습니다.`); return; }
   setStatValue(catId, statId, cur-1);
   refreshPlay();
 }
@@ -1270,7 +1324,7 @@ function renderSelectCategoryPlayBlock(c){
     const costTxt = o.cost>0 ? `+${o.cost}pt` : (o.cost<0 ? `${o.cost}pt` : '0pt');
     const imgHtml = o.image ? `
         <div class="opt-card-img-wrap">
-          <img src="${escapeHtml(o.image)}" class="opt-card-img">
+          <img src="${escapeHtml(o.image)}" class="opt-card-img" onerror="handleImgError(this)">
           ${isSel ? `<div class="sel-badge">✓</div>` : ''}
         </div>` : '';
     return `
@@ -1286,7 +1340,7 @@ function renderSelectCategoryPlayBlock(c){
   }).join('');
   return `
     <div class="cat-title"><h2>${escapeHtml(c.name)}</h2><span class="pill">${limitTxt}</span></div>
-    ${c.image ? `<img src="${escapeHtml(c.image)}" class="cat-banner">` : ''}
+    ${c.image ? `<img src="${escapeHtml(c.image)}" class="cat-banner" onerror="handleImgError(this)">` : ''}
     <div class="opt-grid">${optsHtml}</div>
   `;
 }
@@ -1393,7 +1447,7 @@ function renderStatCategoryPlayBlock(c){
   const color = remaining<0 ? 'var(--critical)' : ((c.statBudget>0 && remaining<=c.statBudget*0.15) ? 'var(--warning)' : 'var(--good)');
   return `
     <div class="cat-title"><h2>${escapeHtml(c.name)}</h2><span class="pill">스텟 ${spent} / ${c.statBudget}pt</span></div>
-    ${c.image ? `<img src="${escapeHtml(c.image)}" class="cat-banner">` : ''}
+    ${c.image ? `<img src="${escapeHtml(c.image)}" class="cat-banner" onerror="handleImgError(this)">` : ''}
     <div class="stat-mini-meter"><div class="stat-mini-track"><div class="stat-mini-fill" style="width:${Math.round(ratio*100)}%; background:${color};"></div></div></div>
     ${renderStatCategoryBody(c, true)}
   `;
@@ -1486,7 +1540,7 @@ function renderSummary(){
       return `
         <div class="sum-item">
           <div class="sum-item-left">
-            ${o.image ? `<img src="${escapeHtml(o.image)}" class="img-thumb-sm">` : ''}
+            ${o.image ? `<img src="${escapeHtml(o.image)}" class="img-thumb-sm" onerror="handleImgError(this)">` : ''}
             <div><div class="n">${escapeHtml(o.name)}</div>${o.description?`<div class="d">${escapeHtml(o.description)}</div>`:''}</div>
           </div>
           <div class="c" style="color:${costColor};">${costTxt}</div>
