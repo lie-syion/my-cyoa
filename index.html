@@ -1,0 +1,1410 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CYOA 캐릭터 생성기</title>
+<style>
+  :root{
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --border:         rgba(11,11,11,0.10);
+    --accent:         #2a78d6;
+    --accent-2:       #4a3aa7;
+    --good:           #0ca30c;
+    --warning:        #fab219;
+    --serious:        #ec835a;
+    --critical:       #d03b3b;
+    --success-text:   #006300;
+    --radius: 14px;
+  }
+  [data-theme="dark"]{
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page-plane:     #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --border:         rgba(255,255,255,0.10);
+    --accent:         #3987e5;
+    --accent-2:       #9085e9;
+    --success-text:   #0ca30c;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--page-plane);
+    color:var(--text-primary);
+    font-family: system-ui,-apple-system,"Segoe UI",sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  #toast{
+    position:fixed; top:16px; left:50%; transform:translateX(-50%) translateY(-140%);
+    background:var(--text-primary); color:var(--page-plane);
+    padding:10px 18px; border-radius:999px; font-size:14px; font-weight:600;
+    box-shadow:0 8px 24px rgba(0,0,0,0.25); z-index:999; opacity:0;
+    transition:transform .25s ease, opacity .25s ease; pointer-events:none;
+    max-width:90vw; text-align:center;
+  }
+  #toast.show{ transform:translateX(-50%) translateY(0); opacity:1; }
+  .wrap{ max-width:920px; margin:0 auto; padding:20px 16px 80px; }
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 0 18px;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; font-weight:800; font-size:18px; }
+  .brand .logo{
+    width:30px;height:30px;border-radius:9px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;
+  }
+  .theme-toggle{
+    border:1px solid var(--border); background:var(--surface-1); color:var(--text-secondary);
+    border-radius:999px; padding:7px 12px; font-size:13px; cursor:pointer; font-weight:600;
+  }
+  h1{ font-size:26px; margin:6px 0 4px; letter-spacing:-0.01em; }
+  h2{ font-size:19px; margin:0 0 4px; letter-spacing:-0.01em; }
+  p.lead{ color:var(--text-secondary); font-size:14.5px; line-height:1.6; margin:0 0 22px; }
+  .card{
+    background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius);
+    padding:18px; margin-bottom:16px;
+  }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }
+  .preset-card{
+    background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius);
+    padding:18px; display:flex; flex-direction:column; gap:8px;
+  }
+  .preset-card .emoji{ font-size:28px; }
+  .preset-card h3{ margin:2px 0 0; font-size:16.5px; }
+  .preset-card p{ margin:0; color:var(--text-secondary); font-size:13.5px; line-height:1.55; flex:1; }
+  .preset-card .row{ display:flex; gap:8px; margin-top:6px; }
+  .btn{
+    border:none; cursor:pointer; border-radius:10px; font-weight:700; font-size:14px;
+    padding:10px 16px; transition:filter .15s ease, transform .05s ease;
+    font-family:inherit;
+  }
+  .btn:active{ transform:scale(0.98); }
+  .btn-primary{ background:var(--accent); color:#fff; }
+  .btn-primary:hover{ filter:brightness(1.08); }
+  .btn-secondary{ background:transparent; color:var(--text-primary); border:1px solid var(--border); }
+  .btn-secondary:hover{ background:var(--gridline); }
+  .btn-ghost{ background:transparent; color:var(--text-secondary); border:1px dashed var(--border); }
+  .btn-danger{ background:transparent; color:var(--critical); border:1px solid var(--border); }
+  .btn-danger:hover{ background:rgba(208,59,59,0.08); }
+  .btn-sm{ padding:6px 11px; font-size:12.5px; border-radius:8px; }
+  .btn-block{ width:100%; }
+  input[type=text], input[type=number], textarea, select{
+    width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--border);
+    background:var(--page-plane); color:var(--text-primary); font-family:inherit; font-size:14px;
+  }
+  textarea{ resize:vertical; min-height:56px; }
+  label.field-label{ display:block; font-size:12.5px; font-weight:700; color:var(--text-secondary); margin:0 0 5px; }
+  .field{ margin-bottom:12px; }
+  .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .hr{ height:1px; background:var(--gridline); border:none; margin:16px 0; }
+  .muted{ color:var(--text-muted); font-size:12.5px; }
+  .pill{
+    display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:700;
+    padding:3px 9px; border-radius:999px; background:var(--gridline); color:var(--text-secondary);
+  }
+  /* ---- Editor ---- */
+  .cat-block{ border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px; background:var(--page-plane); }
+  .cat-head{ display:flex; gap:10px; align-items:flex-end; margin-bottom:10px; flex-wrap:wrap; }
+  .cat-head .grow{ flex:1; min-width:160px; }
+  .opt-row{ display:grid; grid-template-columns:1.3fr 1.7fr 90px 40px; gap:8px; align-items:center; margin-bottom:7px; }
+  .opt-row input[type=number]{ text-align:right; }
+  @media (max-width:640px){ .opt-row{ grid-template-columns:1fr; } .field-row{ grid-template-columns:1fr; } }
+  .icon-btn{ background:transparent; border:1px solid var(--border); border-radius:8px; cursor:pointer; color:var(--critical); font-size:14px; padding:8px; line-height:1; }
+  .icon-btn:hover{ background:rgba(208,59,59,0.08); }
+  .footer-actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; }
+  .file-btn{ position:relative; overflow:hidden; display:inline-block; }
+  .file-btn input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; }
+  /* ---- Meter ---- */
+  .meter-wrap{
+    position:sticky; top:0; z-index:50; background:var(--page-plane);
+    padding-top:10px; margin:-4px 0 18px; backdrop-filter: blur(6px);
+  }
+  .meter-card{ background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; }
+  .meter-top{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; gap:10px; flex-wrap:wrap; }
+  .meter-num{ font-size:22px; font-weight:800; font-variant-numeric:proportional-nums; }
+  .meter-status{ display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; }
+  .meter-track{ height:10px; border-radius:999px; background:var(--gridline); overflow:hidden; position:relative; }
+  .meter-fill{ height:100%; border-radius:999px; transition:width .25s ease, background .25s ease; }
+  /* ---- Play ---- */
+  .cat-title{ display:flex; align-items:baseline; justify-content:space-between; margin:22px 0 10px; }
+  .cat-title h2{ margin:0; }
+  .opt-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; }
+  .opt-card{
+    border:1px solid var(--border); border-radius:12px; padding:13px; cursor:pointer;
+    background:var(--surface-1); transition:border-color .15s ease, background .15s ease;
+  }
+  .opt-card:hover{ border-color:var(--accent); }
+  .opt-card.selected{ border-color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, var(--surface-1)); box-shadow:0 0 0 1px var(--accent) inset; }
+  .opt-card-top{ display:flex; justify-content:space-between; gap:8px; align-items:flex-start; }
+  .opt-name{ font-weight:700; font-size:14.5px; }
+  .opt-cost{ font-size:12.5px; font-weight:800; white-space:nowrap; padding:2px 8px; border-radius:999px; }
+  .opt-cost.pos{ background:rgba(42,120,214,0.12); color:var(--accent); }
+  .opt-cost.neg{ background:rgba(12,163,12,0.12); color:var(--success-text); }
+  .opt-cost.zero{ background:var(--gridline); color:var(--text-secondary); }
+  .opt-desc{ color:var(--text-secondary); font-size:12.5px; margin-top:5px; line-height:1.5; }
+  .name-input-row{ display:flex; gap:10px; align-items:center; margin-bottom:6px; flex-wrap:wrap; }
+  .name-input-row input{ max-width:320px; }
+  .top-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+  /* ---- Summary ---- */
+  .sum-cat{ margin-bottom:16px; }
+  .sum-cat h3{ font-size:14px; margin:0 0 8px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.03em; }
+  .sum-item{ display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--gridline); }
+  .sum-item:last-child{ border-bottom:none; }
+  .sum-item .n{ font-weight:600; font-size:14px; }
+  .sum-item .d{ color:var(--text-muted); font-size:12px; margin-top:2px; }
+  .sum-item .c{ font-weight:700; font-size:13.5px; white-space:nowrap; }
+  .total-row{ display:flex; justify-content:space-between; align-items:center; padding-top:10px; font-size:15.5px; font-weight:800; }
+  /* ---- Modal ---- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal-box{
+    background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius);
+    padding:20px; max-width:380px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,0.35);
+  }
+  .modal-msg{ font-size:14.5px; line-height:1.6; margin:0 0 18px; white-space:pre-line; }
+  .modal-actions{ display:flex; gap:8px; justify-content:flex-end; }
+  /* ---- Images ---- */
+  .img-field{ margin-top:8px; margin-bottom:4px; }
+  .img-row{ display:flex; gap:10px; align-items:flex-start; flex-wrap:wrap; }
+  .img-thumb-lg{ width:140px; height:90px; object-fit:cover; border-radius:10px; border:1px solid var(--border); flex-shrink:0; }
+  .img-thumb-sm{ width:40px; height:40px; object-fit:cover; border-radius:8px; border:1px solid var(--border); flex-shrink:0; }
+  .img-empty{ display:flex; align-items:center; justify-content:center; background:var(--gridline); color:var(--text-muted); font-size:11px; text-align:center; }
+  .img-controls{ display:flex; flex-direction:column; gap:6px; flex:1; min-width:160px; }
+  .img-controls input[type=text]{ font-size:12.5px; padding:7px 9px; }
+  .opt-edit-block{ border-top:1px dashed var(--border); padding-top:8px; margin-bottom:10px; }
+  .opt-edit-block:first-of-type{ border-top:none; padding-top:0; }
+  .opt-img-row{ display:flex; align-items:center; gap:8px; margin-top:6px; }
+  .opt-img-row input[type=text]{ font-size:12px; padding:6px 8px; }
+  .opt-link-row{ display:flex; align-items:center; gap:8px; margin-top:6px; }
+  .opt-link-row input[type=text]{ flex:1; font-size:12px; padding:6px 8px; }
+  .link-tag{ display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; color:var(--accent-2); margin-top:6px; }
+  .cat-banner{ width:100%; max-height:180px; object-fit:cover; border-radius:12px; margin-bottom:12px; display:block; }
+  .opt-card-img-wrap{ position:relative; margin:-13px -13px 10px; }
+  .opt-card-img{ width:100%; aspect-ratio:16/10; object-fit:cover; border-radius:12px 12px 0 0; display:block; }
+  .sel-badge{
+    position:absolute; top:8px; right:8px; background:var(--accent); color:#fff;
+    width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:12.5px; font-weight:800; box-shadow:0 2px 8px rgba(0,0,0,0.35);
+  }
+  .sum-item-left{ display:flex; gap:10px; align-items:flex-start; }
+  /* ---- Stat category (editor) ---- */
+  .stat-edit-row{ display:grid; grid-template-columns:1.6fr 64px 64px 64px 40px; gap:8px; align-items:center; margin-bottom:7px; }
+  .stat-edit-row input[type=number]{ text-align:right; }
+  @media (max-width:640px){ .stat-edit-row{ grid-template-columns:1fr; } }
+  /* ---- Stat category (play/summary) ---- */
+  .stat-mini-meter{ margin:6px 0 16px; }
+  .stat-mini-track{ height:8px; border-radius:999px; background:var(--gridline); overflow:hidden; }
+  .stat-mini-fill{ height:100%; border-radius:999px; transition:width .2s ease, background .2s ease; }
+  .stat-controls{ display:flex; align-items:center; gap:10px; }
+  .stat-btn{
+    width:30px; height:30px; border-radius:8px; border:1px solid var(--border); background:var(--surface-1);
+    color:var(--text-primary); font-size:16px; font-weight:800; cursor:pointer; line-height:1;
+  }
+  .stat-btn:hover:not(:disabled){ background:var(--gridline); }
+  .stat-btn:disabled{ opacity:.35; cursor:not-allowed; }
+  .stat-controls-val{ min-width:24px; text-align:center; font-weight:800; font-variant-numeric:tabular-nums; }
+  .stat-name{ font-weight:700; font-size:14px; }
+  .stat-val{ font-size:13px; font-weight:700; color:var(--text-secondary); }
+  .stat-bar-list{ display:flex; flex-direction:column; gap:14px; }
+  .stat-row-top{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+  .stat-bar-track{ height:12px; border-radius:999px; background:var(--gridline); overflow:hidden; margin-bottom:8px; }
+  .stat-bar-fill{ height:100%; border-radius:999px; background:var(--accent); transition:width .2s ease; }
+  .stat-number-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; }
+  .stat-number-card{
+    border:1px solid var(--border); border-radius:12px; padding:14px; text-align:center;
+    background:var(--surface-1); display:flex; flex-direction:column; gap:6px; align-items:center;
+  }
+  .stat-number-big{ font-size:32px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--accent); }
+  .stat-radar-wrap{ background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius); padding:14px 10px; margin-bottom:14px; }
+  .stat-list{ display:flex; flex-direction:column; gap:10px; }
+  .stat-list-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface-1); }
+  .stat-sum-row{ display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--gridline); }
+  .stat-sum-row:last-child{ border-bottom:none; }
+</style>
+</head>
+<body>
+  <div id="toast"></div>
+  <div id="modalOverlay" class="modal-overlay" style="display:none;">
+    <div class="modal-box" id="modalBox"></div>
+  </div>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand"><span class="logo">✦</span> CYOA 캐릭터 생성기</div>
+      <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">🌙 다크모드</button>
+    </div>
+    <div id="app"></div>
+  </div>
+
+<script>
+/* ===================== 데이터 ===================== */
+function uid(p){ return p+'_'+Math.random().toString(36).slice(2,9); }
+function escapeHtml(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function cat(name,type,max,options){ return {id:uid('cat'), name, categoryMode:'select', type, maxSelections:max||0, image:'', options}; }
+function opt(name,desc,cost){ return {id:uid('opt'), name, description:desc, cost, image:'', linkGroup:''}; }
+
+const PRESETS = {
+  fantasy: {
+    title:'판타지 모험가',
+    description:'검과 마법의 세계에서 살아갈 나만의 모험가를 만들어보세요.',
+    pointBudget:100, allowNegative:false,
+    categories:[
+      cat('종족','single',0,[
+        opt('인간','균형 잡힌 능력치와 여분의 재능 하나를 얻습니다.',0),
+        opt('엘프','마법에 대한 감각이 뛰어나고 몸이 날래다.',15),
+        opt('드워프','튼튼한 몸과 뛰어난 손재주를 가졌다.',12),
+        opt('오크','강인한 힘을 지녔지만 사교에는 서툴다.',10),
+        opt('하플링','작고 재빠르며 남다른 행운을 타고났다.',8),
+        opt('수인족','예민한 감각과 어둠 속 시야를 지녔다.',18),
+      ]),
+      cat('직업','single',0,[
+        opt('전사','근접 전투와 방어에 능숙한 전선의 핵심.',20),
+        opt('마법사','원소와 주문을 다루는 강력한 술사.',25),
+        opt('도적','은신과 기습, 손재주에 특화된 그림자.',18),
+        opt('성직자','신성한 힘으로 치유하고 축복을 내린다.',20),
+        opt('음유시인','노래와 언변으로 아군을 북돋는 만능형.',15),
+        opt('방랑자','정해진 틀이 없는 자유로운 모험가.',5),
+      ]),
+      cat('특성 · 재능','multi',3,[
+        opt('강철 근육','근력 판정에 강한 보너스를 얻는다.',10),
+        opt('마나 친화','마법 시전이 한결 수월해진다.',12),
+        opt('은신의 달인','상대에게 들키지 않고 움직인다.',10),
+        opt('불굴의 의지','정신적 압박과 공포에 저항한다.',8),
+        opt('행운아','결정적인 순간에 운이 따른다.',15),
+        opt('다재다능','여러 기술을 두루 다룰 수 있다.',10),
+      ]),
+      cat('장비','multi',4,[
+        opt('명검','오랜 세월 벼려진 날카로운 검.',12),
+        opt('마법 지팡이','주문의 위력을 증폭시켜준다.',14),
+        opt('가죽 갑옷','가볍고 활동성이 좋은 방어구.',5),
+        opt('판금 갑옷','무겁지만 확실한 방어력을 제공한다.',10),
+        opt('치유 물약 세트','위급할 때 체력을 회복시켜준다.',6),
+        opt('여행자의 배낭','각종 생존 도구가 들어있다.',3),
+      ]),
+      cat('결함 · 약점','multi',0,[
+        opt('트라우마','과거의 상처가 이따금 발목을 잡는다.',-8),
+        opt('숙적','반드시 되갚아주려는 강력한 적이 있다.',-10),
+        opt('만성 질환','이따금 몸 상태가 나빠진다.',-6),
+        opt('가난','재물과는 인연이 없다.',-5),
+        opt('소심함','낯선 상황에서 위축되곤 한다.',-4),
+      ]),
+    ]
+  },
+  scifi: {
+    title:'SF 개척자',
+    description:'은하 저편, 미지의 우주를 누비는 나만의 캐릭터를 설계하세요.',
+    pointBudget:100, allowNegative:false,
+    categories:[
+      cat('종','single',0,[
+        opt('휴먼','적응력이 뛰어난 표준적인 지구인.',0),
+        opt('사이보그','신체 일부가 기계로 대체된 강화 인간.',14),
+        opt('외계종족','지구 밖에서 온 독특한 생리를 지녔다.',16),
+        opt('안드로이드 / AI','인공적으로 만들어진 인공지능체.',20),
+        opt('유전자 강화인류','유전공학으로 신체 능력이 개선되었다.',10),
+      ]),
+      cat('직업','single',0,[
+        opt('파일럿','어떤 우주선이든 능숙히 조종한다.',18),
+        opt('해커','네트워크와 보안 시스템을 뚫는 전문가.',22),
+        opt('용병','전투와 임무 수행에 특화되었다.',20),
+        opt('과학자','기술과 데이터 분석에 통달했다.',18),
+        opt('외교관','설득과 협상으로 상황을 풀어간다.',15),
+        opt('프리랜서','정해진 소속 없이 자유롭게 일한다.',5),
+      ]),
+      cat('장비 · 사이버웨어','multi',4,[
+        opt('전투 슈트','전투와 생존을 위한 강화 슈트.',12),
+        opt('사이버 임플란트','신체 능력을 보조하는 이식 장치.',10),
+        opt('플라즈마 무기','강력한 에너지 무기.',14),
+        opt('스텔스 클로킹','일시적으로 모습을 감춘다.',16),
+        opt('드론 동료','정찰과 지원을 맡는 소형 드론.',8),
+        opt('개인 우주선 모듈','작은 개인용 우주선을 보유한다.',20),
+      ]),
+      cat('특성','multi',3,[
+        opt('초인적 반사신경','위기 상황에서 재빠르게 반응한다.',12),
+        opt('해킹 마스터리','시스템 침투 속도가 매우 빠르다.',10),
+        opt('냉철한 판단력','압박 속에서도 침착함을 유지한다.',8),
+        opt('생존 본능','극한 환경에서도 살아남는다.',10),
+        opt('카리스마','타인을 설득하고 이끄는 힘이 있다.',15),
+      ]),
+      cat('결함 · 약점','multi',0,[
+        opt('임플란트 부작용','가끔 신체 이식물이 오작동한다.',-8),
+        opt('수배자','당국 혹은 조직에게 쫓기고 있다.',-10),
+        opt('기억 결손','과거의 일부 기억을 잃었다.',-6),
+        opt('부채','갚아야 할 빚이 남아있다.',-5),
+        opt('고립공포증','좁은 공간을 극도로 꺼린다.',-4),
+      ]),
+    ]
+  },
+  hero: {
+    title:'슈퍼히어로',
+    description:'초능력을 각성한 히어로가 되어 나만의 정체성을 완성하세요.',
+    pointBudget:100, allowNegative:false,
+    categories:[
+      cat('기원','single',0,[
+        opt('돌연변이','타고난 유전자로 인해 능력을 각성했다.',10),
+        opt('과학 실험','실험 사고 혹은 시술로 힘을 얻었다.',20),
+        opt('외계 출신','다른 행성에서 지구로 왔다.',18),
+        opt('마법의 계약','신비한 존재와 계약해 힘을 빌렸다.',22),
+        opt('첨단 장비 의존','기술력으로 만든 장비에 의존한다.',15),
+        opt('평범한 인간','능력은 없지만 강한 의지를 지녔다.',0),
+      ]),
+      cat('주 능력','single',0,[
+        opt('초인적 힘','압도적인 괴력을 발휘한다.',25),
+        opt('비행','자유롭게 하늘을 난다.',20),
+        opt('염력','생각만으로 물체를 움직인다.',22),
+        opt('초고속 재생','상처가 빠르게 회복된다.',24),
+        opt('시간 정지','아주 짧은 순간 시간을 멈춘다.',30),
+        opt('원소 조종','불, 물, 바람 등 원소를 다룬다.',25),
+      ]),
+      cat('보조 능력','multi',3,[
+        opt('향상된 감각','시각·청각 등이 인간을 초월한다.',8),
+        opt('순간이동(단거리)','짧은 거리를 즉시 이동한다.',15),
+        opt('방어막 생성','에너지 방어막을 두른다.',10),
+        opt('은신 / 투명화','모습을 감출 수 있다.',12),
+        opt('텔레파시','타인과 정신으로 대화한다.',14),
+      ]),
+      cat('코스튬 · 장비','multi',2,[
+        opt('강화 슈트','신체 능력을 보조하는 특수 슈트.',10),
+        opt('상징 무기','정체성을 상징하는 전용 무기.',8),
+        opt('은신 망토','추적을 피하게 해주는 망토.',6),
+        opt('통신 장치','동료들과 실시간으로 연락한다.',3),
+      ]),
+      cat('약점','multi',0,[
+        opt('특정 물질에 취약','특정 물질 앞에서 힘을 잃는다.',-10),
+        opt('정체 숨기기 부담','평범한 삶과 병행하기 버겁다.',-5),
+        opt('능력 사용 시 체력 소모','힘을 쓸수록 급격히 지친다.',-8),
+        opt('숙적의 존재','끈질기게 쫓아오는 강력한 적이 있다.',-6),
+        opt('트라우마','과거의 사건이 발목을 잡는다.',-7),
+      ]),
+    ]
+  }
+};
+const PRESET_META = {
+  fantasy:{emoji:'🗡️'}, scifi:{emoji:'🚀'}, hero:{emoji:'🦸'}
+};
+
+/* ===================== 상태 ===================== */
+let state = {
+  screen:'home', // home | editor | play | summary
+  template:null,
+  play:{ characterName:'', selections:{}, statValues:{} }
+};
+
+function cloneTemplate(t){ return JSON.parse(JSON.stringify(t)); }
+function findCat(catId){ return state.template.categories.find(c=>c.id===catId); }
+function findOpt(catId,optId){ const c=findCat(catId); return c && c.options.find(o=>o.id===optId); }
+
+/* ===================== 공통 유틸 ===================== */
+function showToast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;
+  el.classList.add('show');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer=setTimeout(()=>el.classList.remove('show'), 2200);
+}
+function downloadBlob(content,filename,mime){
+  const blob=new Blob([content],{type:mime});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  a.remove(); URL.revokeObjectURL(url);
+}
+function downloadJSON(obj,filename){ downloadBlob(JSON.stringify(obj,null,2), filename, 'application/json'); }
+function downloadText(text,filename){ downloadBlob(text, filename, 'text/plain;charset=utf-8'); }
+function safeFilename(s){ return (s||'character').replace(/[\\/:*?"<>|]+/g,'_').trim() || 'character'; }
+
+/* ===================== 공유 링크 (압축 + base64url, 서버/계정 불필요) ===================== */
+function bytesToBase64Url(bytes){
+  let binary = '';
+  for(let i=0;i<bytes.length;i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function base64UrlToBytes(b64url){
+  let b64 = b64url.replace(/-/g,'+').replace(/_/g,'/');
+  while(b64.length % 4) b64 += '=';
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for(let i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+async function compressToShareCode(obj){
+  const json = JSON.stringify(obj);
+  if(typeof CompressionStream === 'function'){
+    const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
+    const buf = await new Response(stream).arrayBuffer();
+    return 'gz.' + bytesToBase64Url(new Uint8Array(buf));
+  }
+  // 압축 API가 없는 구형 브라우저: 압축 없이 그대로 인코딩
+  return 'raw.' + bytesToBase64Url(new TextEncoder().encode(json));
+}
+async function decompressShareCode(code){
+  const dot = code.indexOf('.');
+  const kind = dot>-1 ? code.slice(0,dot) : 'gz';
+  const payload = dot>-1 ? code.slice(dot+1) : code;
+  const bytes = base64UrlToBytes(payload);
+  if(kind==='raw'){
+    return new TextDecoder().decode(bytes);
+  }
+  if(typeof DecompressionStream !== 'function'){
+    throw new Error('이 브라우저는 압축된 공유 링크를 지원하지 않습니다.');
+  }
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  const buf = await new Response(stream).arrayBuffer();
+  return new TextDecoder().decode(buf);
+}
+function currentBaseUrl(){
+  return location.href.split('#')[0];
+}
+async function buildShareLink(payload){
+  const code = await compressToShareCode(payload);
+  return `${currentBaseUrl()}#share=${code}`;
+}
+function showShareLinkModal(url, warnLong){
+  const box = document.getElementById('modalBox');
+  box.innerHTML = `
+    <p class="modal-msg">아래 링크를 복사해서 공유하세요. 이 링크를 여는 사람은 누구나 이 생성기에서 바로 같은 내용을 열어볼 수 있어요.${warnLong ? '\n\n⚠️ 이미지가 포함돼서 링크가 매우 깁니다. 일부 메신저에서는 링크가 잘릴 수 있으니, 이미지를 뺀 템플릿을 공유하거나 .json 파일 공유를 이용하는 걸 추천해요.' : ''}</p>
+    <input type="text" id="shareLinkInput" value="${escapeHtml(url)}" readonly style="margin-bottom:14px; font-size:12px;" onclick="this.select()">
+    <div class="modal-actions">
+      <button class="btn btn-secondary btn-sm" id="modalCancelBtn">닫기</button>
+      <button class="btn btn-primary btn-sm" id="modalYesBtn">🔗 링크 복사</button>
+    </div>`;
+  document.getElementById('modalOverlay').style.display='flex';
+  document.getElementById('modalCancelBtn').onclick = closeModal;
+  document.getElementById('modalYesBtn').onclick = ()=>{
+    const input = document.getElementById('shareLinkInput');
+    input.select();
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(()=>showToast('링크를 복사했습니다!')).catch(()=>showToast('복사에 실패했습니다. 링크를 직접 선택해 복사해주세요.'));
+    } else {
+      document.execCommand('copy');
+      showToast('링크를 복사했습니다!');
+    }
+  };
+}
+async function shareTemplateLink(){
+  try{
+    const url = await buildShareLink({ type:'template', template: state.template });
+    showShareLinkModal(url, url.length > 6000);
+  }catch(err){
+    showAlert('공유 링크를 만들지 못했습니다: '+err.message);
+  }
+}
+async function shareCharacterLink(){
+  try{
+    const url = await buildShareLink({ type:'character', template: state.template, characterName: state.play.characterName, selections: state.play.selections, statValues: state.play.statValues });
+    showShareLinkModal(url, url.length > 6000);
+  }catch(err){
+    showAlert('공유 링크를 만들지 못했습니다: '+err.message);
+  }
+}
+async function loadFromShareHash(){
+  const m = location.hash.match(/#share=(.+)$/);
+  if(!m) return false;
+  try{
+    const json = await decompressShareCode(decodeURIComponent(m[1]));
+    const data = JSON.parse(json);
+    if(data.type==='template' && data.template){
+      state.template = data.template;
+      state.play = { characterName:'', selections:{}, statValues:{} };
+      state.screen='play';
+      showToast('공유된 템플릿을 불러왔습니다!');
+      return true;
+    }
+    if(data.type==='character' && data.template){
+      state.template = data.template;
+      state.play = { characterName:data.characterName||'', selections:data.selections||{}, statValues:data.statValues||{} };
+      state.screen='summary';
+      showToast('공유된 캐릭터를 불러왔습니다!');
+      return true;
+    }
+  }catch(err){
+    showAlert('공유 링크를 여는 중 문제가 발생했습니다: '+err.message);
+  }
+  return false;
+}
+
+function toggleTheme(){
+  const root=document.documentElement;
+  const isDark = root.getAttribute('data-theme')==='dark';
+  root.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('themeBtn').textContent = isDark ? '🌙 다크모드' : '☀️ 라이트모드';
+}
+
+/* ---- 커스텀 모달 (네이티브 confirm/alert는 샌드박스 환경에서 막힐 수 있어 사용하지 않음) ---- */
+function closeModal(){ document.getElementById('modalOverlay').style.display='none'; }
+function showAlert(msg, onOk){
+  const box=document.getElementById('modalBox');
+  box.innerHTML = `<p class="modal-msg">${escapeHtml(msg)}</p><div class="modal-actions"><button class="btn btn-primary btn-sm" id="modalOkBtn">확인</button></div>`;
+  document.getElementById('modalOverlay').style.display='flex';
+  document.getElementById('modalOkBtn').onclick = ()=>{ closeModal(); if(onOk) onOk(); };
+}
+function showConfirm(msg, onYes){
+  const box=document.getElementById('modalBox');
+  box.innerHTML = `<p class="modal-msg">${escapeHtml(msg)}</p><div class="modal-actions"><button class="btn btn-secondary btn-sm" id="modalCancelBtn">취소</button><button class="btn btn-primary btn-sm" id="modalYesBtn">확인</button></div>`;
+  document.getElementById('modalOverlay').style.display='flex';
+  document.getElementById('modalCancelBtn').onclick = closeModal;
+  document.getElementById('modalYesBtn').onclick = ()=>{ closeModal(); onYes(); };
+}
+
+/* ---- 이미지 업로드 (선택된 파일을 리사이즈해서 data URL로 저장) ---- */
+function resizeImageFile(file, maxDim, quality){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let w=img.width, h=img.height;
+        if(w>h){ if(w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; } }
+        else { if(h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; } }
+        const canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = ()=>reject(new Error('이미지를 해석할 수 없습니다.'));
+      img.src = e.target.result;
+    };
+    reader.onerror = ()=>reject(new Error('파일을 읽을 수 없습니다.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ===================== 렌더 디스패치 ===================== */
+function render(){
+  const app=document.getElementById('app');
+  if(state.screen==='home') app.innerHTML = renderHome();
+  else if(state.screen==='editor') app.innerHTML = renderEditor();
+  else if(state.screen==='play') app.innerHTML = renderPlay();
+  else if(state.screen==='summary') app.innerHTML = renderSummary();
+  window.scrollTo({top:0,behavior:'instant'});
+}
+function refreshEditor(){ document.getElementById('app').innerHTML = renderEditor(); }
+function refreshPlay(){ document.getElementById('app').innerHTML = renderPlay(); }
+
+/* ===================== 홈 ===================== */
+function renderHome(){
+  const presetCards = Object.keys(PRESETS).map(key=>{
+    const p = PRESETS[key];
+    return `
+      <div class="preset-card">
+        <div class="emoji">${PRESET_META[key].emoji}</div>
+        <h3>${escapeHtml(p.title)}</h3>
+        <p>${escapeHtml(p.description)}</p>
+        <div class="muted">예산 ${p.pointBudget}pt · 카테고리 ${p.categories.length}개</div>
+        <div class="row">
+          <button class="btn btn-primary btn-sm" style="flex:1" onclick="usePreset('${key}')">바로 플레이</button>
+          <button class="btn btn-secondary btn-sm" style="flex:1" onclick="editPreset('${key}')">편집해서 사용</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <h1>나만의 CYOA 캐릭터 시트를 만들어보세요</h1>
+    <p class="lead">장르와 테마를 자유롭게 정할 수 있는 포인트 예산제 캐릭터 생성 툴입니다. 아래 예시 템플릿으로 바로 시작하거나, 완전히 새로운 템플릿을 직접 설계해보세요.</p>
+
+    <div class="card">
+      <h2>새로 만들기</h2>
+      <p class="lead" style="margin-bottom:14px;">카테고리, 옵션, 포인트 비용을 처음부터 자유롭게 설계합니다.</p>
+      <div class="footer-actions">
+        <button class="btn btn-primary" onclick="startNewTemplate()">➕ 빈 템플릿으로 시작</button>
+        <div class="file-btn">
+          <button class="btn btn-secondary">📂 저장된 파일 불러오기 (.json)</button>
+          <input type="file" accept=".json,application/json" onchange="importJSONFile(this)">
+        </div>
+      </div>
+    </div>
+
+    <h2 style="margin:22px 0 12px;">예시 템플릿으로 시작하기</h2>
+    <div class="grid">${presetCards}</div>
+  `;
+}
+function startNewTemplate(){
+  state.template = { id:uid('tpl'), title:'', description:'', pointBudget:100, allowNegative:false, categories:[] };
+  state.screen='editor'; render();
+}
+function usePreset(key){
+  state.template = cloneTemplate(PRESETS[key]);
+  state.template.id = uid('tpl');
+  state.play = { characterName:'', selections:{}, statValues:{} };
+  state.screen='play'; render();
+}
+function editPreset(key){
+  state.template = cloneTemplate(PRESETS[key]);
+  state.template.id = uid('tpl');
+  state.screen='editor'; render();
+}
+function importJSONFile(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    try{
+      const data = JSON.parse(e.target.result);
+      if(data.type==='template' && data.template){
+        state.template = data.template;
+        state.screen='editor'; render();
+        showToast('템플릿을 불러왔습니다.');
+      } else if(data.type==='character' && data.template){
+        state.template = data.template;
+        state.play = { characterName:data.characterName||'', selections:data.selections||{}, statValues:data.statValues||{} };
+        state.screen='play'; render();
+        showToast('캐릭터를 불러왔습니다.');
+      } else {
+        showAlert('알 수 없는 파일 형식입니다.');
+      }
+    }catch(err){
+      showAlert('파일을 읽는 중 오류가 발생했습니다: '+err.message);
+    }
+  };
+  reader.readAsText(file, 'utf-8');
+  input.value = '';
+}
+function goHome(confirmNeeded){
+  if(confirmNeeded){
+    showConfirm('저장하지 않은 내용은 사라집니다. 처음 화면으로 돌아갈까요?', ()=>{ state.screen='home'; render(); });
+    return;
+  }
+  state.screen='home'; render();
+}
+
+/* ===================== 에디터 ===================== */
+function renderEditor(){
+  const t = state.template;
+  const catsHtml = t.categories.map(c=>renderEditorCategory(c)).join('') ||
+    `<p class="muted" style="text-align:center; padding:20px 0;">아직 카테고리가 없습니다. 아래 버튼으로 추가해보세요.</p>`;
+
+  return `
+    <div class="top-actions" style="margin-bottom:14px;">
+      <button class="btn btn-secondary btn-sm" onclick="goHome(true)">← 처음으로</button>
+    </div>
+    <h1>템플릿 편집</h1>
+    <p class="lead">카테고리와 옵션, 포인트 비용을 자유롭게 구성하세요. 결함처럼 포인트를 돌려받는 옵션은 비용에 음수를 입력하면 됩니다. 카테고리는 옵션을 고르는 '선택형'과, 별도의 포인트로 능력치를 직접 배분하는 '스텟형' 중에서 고를 수 있어요.</p>
+
+    <div class="card">
+      <div class="field">
+        <label class="field-label">템플릿 제목</label>
+        <input type="text" value="${escapeHtml(t.title)}" placeholder="예: 판타지 모험가" oninput="updateTemplateField('title', this.value)">
+      </div>
+      <div class="field">
+        <label class="field-label">설명</label>
+        <textarea placeholder="이 템플릿에 대한 간단한 설명" oninput="updateTemplateField('description', this.value)">${escapeHtml(t.description)}</textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="field-label">포인트 예산</label>
+          <input type="number" value="${t.pointBudget}" oninput="updateTemplateField('pointBudget', this.value)">
+        </div>
+        <div class="field" style="display:flex; align-items:flex-end;">
+          <label style="display:flex; align-items:center; gap:8px; font-size:14px; padding-bottom:9px;">
+            <input type="checkbox" style="width:auto;" ${t.allowNegative?'checked':''} onchange="updateTemplateField('allowNegative', this.checked)">
+            예산 초과(마이너스) 허용
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <h2 style="margin:20px 0 10px;">카테고리</h2>
+    ${catsHtml}
+    <button class="btn btn-ghost btn-block" onclick="addCategory()">➕ 카테고리 추가</button>
+
+    <hr class="hr">
+    <div class="footer-actions">
+      <button class="btn btn-primary" onclick="finishEditingGoPlay()">✅ 저장하고 플레이하기</button>
+      <button class="btn btn-secondary" onclick="shareTemplateLink()">🔗 공유 링크 만들기</button>
+      <button class="btn btn-secondary" onclick="exportTemplateJSON()">⬇️ 템플릿 JSON 내보내기</button>
+      <div class="file-btn">
+        <button class="btn btn-secondary">📂 템플릿 불러오기</button>
+        <input type="file" accept=".json,application/json" onchange="importJSONFile(this)">
+      </div>
+    </div>
+  `;
+}
+function renderEditorCategory(c){
+  const isStat = c.categoryMode==='stat';
+  return `
+    <div class="cat-block">
+      <div class="cat-head">
+        <div class="grow">
+          <label class="field-label">카테고리 이름</label>
+          <input type="text" value="${escapeHtml(c.name)}" oninput="updateCategoryField('${c.id}','name',this.value)">
+        </div>
+        <div style="width:130px;">
+          <label class="field-label">카테고리 방식</label>
+          <select onchange="setCategoryMode('${c.id}', this.value)">
+            <option value="select" ${!isStat?'selected':''}>선택형</option>
+            <option value="stat" ${isStat?'selected':''}>스텟형</option>
+          </select>
+        </div>
+        ${!isStat ? `
+        <div style="width:130px;">
+          <label class="field-label">선택 방식</label>
+          <select onchange="updateCategoryField('${c.id}','type',this.value)">
+            <option value="single" ${c.type==='single'?'selected':''}>단일 선택</option>
+            <option value="multi" ${c.type==='multi'?'selected':''}>다중 선택</option>
+          </select>
+        </div>` : ''}
+        ${(!isStat && c.type==='multi') ? `
+        <div style="width:120px;">
+          <label class="field-label">최대 개수(0=무제한)</label>
+          <input type="number" min="0" value="${c.maxSelections}" oninput="updateCategoryField('${c.id}','maxSelections',this.value)">
+        </div>` : ''}
+        <button class="icon-btn" title="카테고리 삭제" onclick="removeCategory('${c.id}')">🗑</button>
+      </div>
+      <div class="img-field">
+        <label class="field-label">카테고리 대표 이미지 (선택, 플레이 화면 상단에 표시됩니다)</label>
+        <div class="img-row">
+          ${c.image ? `<img src="${escapeHtml(c.image)}" class="img-thumb-lg">` : `<div class="img-thumb-lg img-empty">이미지 없음</div>`}
+          <div class="img-controls">
+            <div class="file-btn btn btn-secondary btn-sm">🖼 이미지 업로드
+              <input type="file" accept="image/*" onchange="setCategoryImageFromFile('${c.id}', this)">
+            </div>
+            <input type="text" placeholder="또는 이미지 URL 입력" onchange="setCategoryImageUrl('${c.id}', this.value)">
+            ${c.image ? `<button class="btn btn-ghost btn-sm" onclick="removeCategoryImage('${c.id}')">이미지 제거</button>` : ''}
+          </div>
+        </div>
+      </div>
+      <hr class="hr" style="margin:14px 0 10px;">
+      ${isStat ? renderEditorStatSection(c) : renderEditorOptionSection(c)}
+    </div>
+  `;
+}
+function renderEditorOptionSection(c){
+  const optsHtml = c.options.map(o=>`
+    <div class="opt-edit-block">
+      <div class="opt-row">
+        <input type="text" value="${escapeHtml(o.name)}" placeholder="옵션 이름" oninput="updateOptionField('${c.id}','${o.id}','name',this.value)">
+        <input type="text" value="${escapeHtml(o.description)}" placeholder="설명 (선택)" oninput="updateOptionField('${c.id}','${o.id}','description',this.value)">
+        <input type="number" value="${o.cost}" oninput="updateOptionField('${c.id}','${o.id}','cost',this.value)">
+        <button class="icon-btn" title="옵션 삭제" onclick="removeOption('${c.id}','${o.id}')">✕</button>
+      </div>
+      <div class="opt-img-row">
+        ${o.image ? `<img src="${escapeHtml(o.image)}" class="img-thumb-sm">` : `<div class="img-thumb-sm img-empty">–</div>`}
+        <div class="file-btn btn btn-secondary btn-sm" style="padding:5px 10px; font-size:11.5px;">이미지 선택
+          <input type="file" accept="image/*" onchange="setOptionImageFromFile('${c.id}','${o.id}', this)">
+        </div>
+        <input type="text" placeholder="또는 이미지 URL" style="flex:1;" onchange="setOptionImageUrl('${c.id}','${o.id}', this.value)">
+        ${o.image ? `<button class="icon-btn" title="이미지 제거" onclick="removeOptionImage('${c.id}','${o.id}')">✕</button>` : ''}
+      </div>
+      <div class="opt-link-row">
+        <span class="muted" style="white-space:nowrap;">🔗 연동 키</span>
+        <input type="text" placeholder="예: vampire_pack — 같은 값을 입력한 다른 옵션과 함께 자동 선택/해제됩니다" value="${escapeHtml(o.linkGroup||'')}" oninput="updateOptionField('${c.id}','${o.id}','linkGroup',this.value)">
+      </div>
+    </div>
+  `).join('') || `<p class="muted" style="margin:4px 0 8px;">옵션이 없습니다.</p>`;
+
+  return `
+    <div class="opt-row" style="font-size:11.5px; color:var(--text-muted); font-weight:700; margin-bottom:4px;">
+      <div>옵션 이름</div><div>설명</div><div style="text-align:right;">비용</div><div></div>
+    </div>
+    ${optsHtml}
+    <button class="btn btn-ghost btn-sm" onclick="addOption('${c.id}')">➕ 옵션 추가</button>
+  `;
+}
+function renderEditorStatSection(c){
+  const stats = c.stats || [];
+  const statsHtml = stats.map(s=>`
+    <div class="stat-edit-row">
+      <input type="text" value="${escapeHtml(s.name)}" placeholder="스텟 이름" oninput="updateStatField('${c.id}','${s.id}','name',this.value)">
+      <input type="number" value="${s.min}" title="최소값" oninput="updateStatField('${c.id}','${s.id}','min',this.value)">
+      <input type="number" value="${s.max}" title="최대값" oninput="updateStatField('${c.id}','${s.id}','max',this.value)">
+      <input type="number" value="${s.cost}" title="1당 비용" oninput="updateStatField('${c.id}','${s.id}','cost',this.value)">
+      <button class="icon-btn" title="스텟 삭제" onclick="removeStat('${c.id}','${s.id}')">✕</button>
+    </div>
+  `).join('') || `<p class="muted" style="margin:4px 0 8px;">아직 스텟이 없습니다.</p>`;
+
+  return `
+    <div class="field-row">
+      <div class="field">
+        <label class="field-label">스텟 포인트 예산</label>
+        <input type="number" value="${c.statBudget}" oninput="updateCategoryField('${c.id}','statBudget',this.value)">
+      </div>
+      <div class="field">
+        <label class="field-label">표현 방식</label>
+        <select onchange="updateCategoryField('${c.id}','statDisplay',this.value); refreshEditor();">
+          <option value="number" ${c.statDisplay==='number'?'selected':''}>일반 숫자</option>
+          <option value="bar" ${c.statDisplay==='bar'?'selected':''}>막대 그래프</option>
+          <option value="radar" ${c.statDisplay==='radar'?'selected':''}>다각형(레이더)</option>
+        </select>
+      </div>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; margin:2px 0 12px;">
+      <input type="checkbox" style="width:auto;" ${c.statAllowNegative?'checked':''} onchange="updateCategoryField('${c.id}','statAllowNegative',this.checked)">
+      스텟 포인트 예산 초과(마이너스) 허용
+    </label>
+    <div class="stat-edit-row" style="font-size:11.5px; color:var(--text-muted); font-weight:700;">
+      <div>스텟 이름</div><div style="text-align:right;">최소</div><div style="text-align:right;">최대</div><div style="text-align:right;">1당 비용</div><div></div>
+    </div>
+    ${statsHtml}
+    <button class="btn btn-ghost btn-sm" onclick="addStat('${c.id}')">➕ 스텟 추가</button>
+  `;
+}
+function updateTemplateField(field, value){
+  if(field==='pointBudget') value = Number(value) || 0;
+  state.template[field] = value;
+}
+function addCategory(){
+  state.template.categories.push({ id:uid('cat'), name:'새 카테고리', categoryMode:'select', type:'single', maxSelections:0, image:'', options:[] });
+  refreshEditor();
+}
+function removeCategory(catId){
+  showConfirm('이 카테고리와 포함된 옵션을 모두 삭제할까요?', ()=>{
+    state.template.categories = state.template.categories.filter(c=>c.id!==catId);
+    refreshEditor();
+  });
+}
+function updateCategoryField(catId, field, value){
+  const c = findCat(catId);
+  if(field==='maxSelections' || field==='statBudget') value = Number(value) || 0;
+  c[field] = value;
+  if(field==='type') refreshEditor();
+}
+function setCategoryMode(catId, mode){
+  const c = findCat(catId);
+  c.categoryMode = mode;
+  if(mode==='stat'){
+    if(!c.stats) c.stats = [];
+    if(c.statBudget==null) c.statBudget = 10;
+    if(!c.statDisplay) c.statDisplay = 'number';
+    if(c.statAllowNegative==null) c.statAllowNegative = false;
+  }
+  refreshEditor();
+}
+function addStat(catId){
+  const c = findCat(catId);
+  if(!c.stats) c.stats = [];
+  c.stats.push({ id:uid('stat'), name:'새 스텟', min:0, max:10, cost:1 });
+  refreshEditor();
+}
+function removeStat(catId, statId){
+  const c = findCat(catId);
+  c.stats = c.stats.filter(s=>s.id!==statId);
+  refreshEditor();
+}
+function updateStatField(catId, statId, field, value){
+  const c = findCat(catId);
+  const s = c.stats.find(x=>x.id===statId);
+  if(field==='min' || field==='max' || field==='cost') value = Number(value) || 0;
+  s[field] = value;
+}
+function addOption(catId){
+  const c = findCat(catId);
+  c.options.push({ id:uid('opt'), name:'새 옵션', description:'', cost:0, image:'', linkGroup:'' });
+  refreshEditor();
+}
+function removeOption(catId, optId){
+  const c = findCat(catId);
+  c.options = c.options.filter(o=>o.id!==optId);
+  refreshEditor();
+}
+function updateOptionField(catId, optId, field, value){
+  const o = findOpt(catId, optId);
+  if(field==='cost') value = Number(value) || 0;
+  o[field] = value;
+}
+async function setCategoryImageFromFile(catId, input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  try{
+    const dataUrl = await resizeImageFile(file, 640, 0.82);
+    findCat(catId).image = dataUrl;
+    refreshEditor();
+  }catch(err){
+    showAlert('이미지를 불러오지 못했습니다: '+err.message);
+  }
+}
+function setCategoryImageUrl(catId, value){
+  findCat(catId).image = value.trim();
+  refreshEditor();
+}
+function removeCategoryImage(catId){
+  findCat(catId).image = '';
+  refreshEditor();
+}
+async function setOptionImageFromFile(catId, optId, input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  try{
+    const dataUrl = await resizeImageFile(file, 480, 0.82);
+    findOpt(catId, optId).image = dataUrl;
+    refreshEditor();
+  }catch(err){
+    showAlert('이미지를 불러오지 못했습니다: '+err.message);
+  }
+}
+function setOptionImageUrl(catId, optId, value){
+  findOpt(catId, optId).image = value.trim();
+  refreshEditor();
+}
+function removeOptionImage(catId, optId){
+  findOpt(catId, optId).image = '';
+  refreshEditor();
+}
+function finishEditingGoPlay(){
+  if(state.template.categories.length===0){
+    showAlert('최소 하나 이상의 카테고리를 추가해주세요.');
+    return;
+  }
+  state.play = { characterName:'', selections:{}, statValues:{} };
+  state.screen='play'; render();
+}
+function exportTemplateJSON(){
+  downloadJSON({ type:'template', template: state.template }, safeFilename(state.template.title)+'_template.json');
+  showToast('템플릿을 저장했습니다.');
+}
+
+/* ===================== 플레이 ===================== */
+function computeSpentForSelections(selections){
+  let spent = 0;
+  state.template.categories.forEach(c=>{
+    if(c.categoryMode==='stat') return; // 스텟형은 별도의 포인트 풀을 사용
+    const sel = selections[c.id] || [];
+    sel.forEach(optId=>{
+      const o = c.options.find(x=>x.id===optId);
+      if(o) spent += o.cost;
+    });
+  });
+  return spent;
+}
+/* ---- 스텟형 카테고리 ---- */
+function getStatValue(catId, statId){
+  const c = findCat(catId);
+  const s = c.stats && c.stats.find(x=>x.id===statId);
+  if(!state.play.statValues) state.play.statValues = {};
+  const stored = state.play.statValues[catId] && state.play.statValues[catId][statId];
+  return stored!=null ? stored : (s ? s.min : 0);
+}
+function setStatValue(catId, statId, value){
+  if(!state.play.statValues) state.play.statValues = {};
+  if(!state.play.statValues[catId]) state.play.statValues[catId] = {};
+  state.play.statValues[catId][statId] = value;
+}
+function computeStatSpent(c){
+  let spent = 0;
+  (c.stats||[]).forEach(s=>{
+    const v = getStatValue(c.id, s.id);
+    spent += (v - s.min) * (s.cost || 1);
+  });
+  return spent;
+}
+function incStat(catId, statId){
+  const c = findCat(catId);
+  const s = c.stats.find(x=>x.id===statId);
+  const cur = getStatValue(catId, statId);
+  if(cur >= s.max){ return; }
+  const cost = s.cost || 1;
+  const spent = computeStatSpent(c);
+  if(!c.statAllowNegative && (spent+cost) > c.statBudget){ showToast('⚠️ 스텟 포인트가 부족합니다.'); return; }
+  setStatValue(catId, statId, cur+1);
+  refreshPlay();
+}
+function decStat(catId, statId){
+  const c = findCat(catId);
+  const s = c.stats.find(x=>x.id===statId);
+  const cur = getStatValue(catId, statId);
+  if(cur <= s.min) return;
+  setStatValue(catId, statId, cur-1);
+  refreshPlay();
+}
+function computeSpent(){ return computeSpentForSelections(state.play.selections); }
+function isOptionSelected(catId, optId){
+  const sel = state.play.selections[catId] || [];
+  return sel.includes(optId);
+}
+function cloneSelections(sel){ return JSON.parse(JSON.stringify(sel)); }
+function applySelectInSelections(selections, cat, o){
+  const arr = selections[cat.id] || (selections[cat.id]=[]);
+  if(cat.type==='single'){
+    if(arr[0]!==o.id) selections[cat.id] = [o.id];
+  } else if(!arr.includes(o.id)){
+    arr.push(o.id);
+  }
+}
+function applyDeselectInSelections(selections, cat, o){
+  selections[cat.id] = (selections[cat.id] || []).filter(id=>id!==o.id);
+}
+/** 같은 연동 키를 가진 옵션들을 함께 묶어 반환 (자기 자신 포함) */
+function findLinkedGroup(originCat, originOpt){
+  const key = (originOpt.linkGroup||'').trim();
+  const group = [{cat:originCat, opt:originOpt}];
+  if(key){
+    state.template.categories.forEach(cat2=>{
+      cat2.options.forEach(o2=>{
+        if(o2.id!==originOpt.id && (o2.linkGroup||'').trim()===key){
+          group.push({cat:cat2, opt:o2});
+        }
+      });
+    });
+  }
+  return group;
+}
+function selectOption(catId, optId){
+  const c = findCat(catId);
+  const o = c.options.find(x=>x.id===optId);
+  const budget = state.template.pointBudget;
+  const allowNeg = !!state.template.allowNegative;
+  const currentlySelected = isOptionSelected(catId, optId);
+  const group = findLinkedGroup(c, o);
+
+  if(currentlySelected){
+    // 그룹 전체를 함께 선택 해제 (연동된 옵션이 있다면 같이 풀림)
+    const trial = cloneSelections(state.play.selections);
+    group.forEach(({cat,opt})=>applyDeselectInSelections(trial, cat, opt));
+    state.play.selections = trial;
+    if(group.length>1) showToast(`🔗 연동 해제: ${group.map(g=>g.opt.name).join(', ')}`);
+  } else {
+    // 직접 클릭한 옵션에 한해서만 다중 선택 최대 개수 제한을 적용 (연동으로 강제 선택되는 옵션은 제한을 넘어설 수 있음)
+    if(c.type==='multi' && c.maxSelections>0){
+      const curArr = state.play.selections[catId] || [];
+      if(curArr.length>=c.maxSelections){ showToast(`⚠️ 최대 ${c.maxSelections}개까지 선택할 수 있습니다.`); return; }
+    }
+    const trial = cloneSelections(state.play.selections);
+    group.forEach(({cat,opt})=>applySelectInSelections(trial, cat, opt));
+    const newSpent = computeSpentForSelections(trial);
+    if(!allowNeg && newSpent > budget){
+      showToast(group.length>1 ? '⚠️ 연동된 옵션을 모두 선택하기엔 포인트가 부족합니다.' : '⚠️ 포인트가 부족합니다.');
+      return;
+    }
+    state.play.selections = trial;
+    if(group.length>1) showToast(`🔗 연동 선택: ${group.map(g=>g.opt.name).join(', ')}`);
+  }
+  refreshPlay();
+}
+function updateCharacterName(value){ state.play.characterName = value; }
+function resetSelections(){
+  showConfirm('모든 선택 내용을 초기화할까요?', ()=>{
+    state.play.selections = {};
+    refreshPlay();
+  });
+}
+function backToEditorFromPlay(){ state.screen='editor'; render(); }
+function goSummary(){ state.screen='summary'; render(); }
+
+function meterHtml(){
+  const budget = state.template.pointBudget;
+  const spent = computeSpent();
+  const remaining = budget - spent;
+  const ratio = budget>0 ? Math.max(0, Math.min(1, spent/budget)) : 0;
+  let color, icon, label;
+  if(remaining < 0){ color='var(--critical)'; icon='⛔'; label='예산 초과'; }
+  else if(budget>0 && remaining <= budget*0.15){ color='var(--warning)'; icon='⚠️'; label='얼마 남지 않음'; }
+  else { color='var(--good)'; icon='✅'; label='포인트 충분'; }
+
+  return `
+    <div class="meter-wrap">
+      <div class="meter-card">
+        <div class="meter-top">
+          <div>
+            <div class="muted" style="margin-bottom:2px;">${escapeHtml(state.template.title||'캐릭터 시트')}</div>
+            <div class="meter-num">잔여 ${remaining} <span style="font-weight:500; font-size:14px; color:var(--text-muted);">/ ${budget}pt</span></div>
+          </div>
+          <div class="meter-status" style="color:${color};">${icon} ${label}</div>
+        </div>
+        <div class="meter-track"><div class="meter-fill" style="width:${Math.round(ratio*100)}%; background:${color};"></div></div>
+      </div>
+    </div>
+  `;
+}
+function renderSelectCategoryPlayBlock(c){
+  const sel = state.play.selections[c.id] || [];
+  const limitTxt = c.type==='multi' ? (c.maxSelections>0 ? `최대 ${c.maxSelections}개` : '다중 선택') : '하나만 선택';
+  const optsHtml = c.options.map(o=>{
+    const isSel = sel.includes(o.id);
+    const costClass = o.cost>0 ? 'pos' : (o.cost<0 ? 'neg' : 'zero');
+    const costTxt = o.cost>0 ? `+${o.cost}pt` : (o.cost<0 ? `${o.cost}pt` : '0pt');
+    const imgHtml = o.image ? `
+        <div class="opt-card-img-wrap">
+          <img src="${escapeHtml(o.image)}" class="opt-card-img">
+          ${isSel ? `<div class="sel-badge">✓</div>` : ''}
+        </div>` : '';
+    return `
+      <div class="opt-card ${isSel?'selected':''}" onclick="selectOption('${c.id}','${o.id}')">
+        ${imgHtml}
+        <div class="opt-card-top">
+          <div class="opt-name">${(isSel && !o.image)?'✓ ':''}${escapeHtml(o.name)}</div>
+          <div class="opt-cost ${costClass}">${costTxt}</div>
+        </div>
+        ${o.description ? `<div class="opt-desc">${escapeHtml(o.description)}</div>` : ''}
+        ${o.linkGroup ? `<div class="link-tag">🔗 연동: ${escapeHtml(o.linkGroup)}</div>` : ''}
+      </div>`;
+  }).join('');
+  return `
+    <div class="cat-title"><h2>${escapeHtml(c.name)}</h2><span class="pill">${limitTxt}</span></div>
+    ${c.image ? `<img src="${escapeHtml(c.image)}" class="cat-banner">` : ''}
+    <div class="opt-grid">${optsHtml}</div>
+  `;
+}
+/* ---- 스텟 시각화 ---- */
+function statControlsHtml(catId, statId, value, min, max){
+  return `
+    <div class="stat-controls">
+      <button class="stat-btn" onclick="incStatEvt(event,'${catId}','${statId}',-1)" ${value<=min?'disabled':''}>−</button>
+      <span class="stat-controls-val">${value}</span>
+      <button class="stat-btn" onclick="incStatEvt(event,'${catId}','${statId}',1)" ${value>=max?'disabled':''}>+</button>
+    </div>`;
+}
+function incStatEvt(evt, catId, statId, dir){
+  if(evt) evt.stopPropagation();
+  if(dir>0) incStat(catId, statId); else decStat(catId, statId);
+}
+function renderRadarSVG(c, values){
+  const stats = c.stats || [];
+  const n = stats.length;
+  if(n < 3){
+    return `<p class="muted" style="text-align:center; padding:10px 0;">다각형 그래프는 스텟이 3개 이상일 때 표시돼요. 아래 목록에서 값을 확인하고 조절하세요.</p>`;
+  }
+  const size = 300, cx = size/2, cy = size/2, R = size*0.26, labelR = size*0.335;
+  const angleFor = i => -Math.PI/2 + i*(2*Math.PI/n);
+  const ringPts = ratio => stats.map((s,i)=>{
+    const a = angleFor(i);
+    return [cx + R*ratio*Math.cos(a), cy + R*ratio*Math.sin(a)];
+  });
+  const gridPolys = [0.25,0.5,0.75,1].map(ratio=>{
+    const pts = ringPts(ratio).map(p=>p.join(',')).join(' ');
+    return `<polygon points="${pts}" fill="none" style="stroke:var(--gridline); stroke-width:1;"/>`;
+  }).join('');
+  const axisLines = stats.map((s,i)=>{
+    const a = angleFor(i);
+    const x2 = cx+R*Math.cos(a), y2 = cy+R*Math.sin(a);
+    return `<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" style="stroke:var(--gridline); stroke-width:1;"/>`;
+  }).join('');
+  const dataPts = stats.map((s,i)=>{
+    const v = values[s.id];
+    const ratio = s.max>s.min ? Math.max(0, Math.min(1, (v-s.min)/(s.max-s.min))) : 0;
+    const a = angleFor(i);
+    return [cx + R*ratio*Math.cos(a), cy + R*ratio*Math.sin(a)];
+  });
+  const dataPolyStr = dataPts.map(p=>p.join(',')).join(' ');
+  const dataDots = dataPts.map(([x,y])=>`<circle cx="${x}" cy="${y}" r="4" style="fill:var(--accent);"/>`).join('');
+  const labels = stats.map((s,i)=>{
+    const a = angleFor(i);
+    const lx = cx+labelR*Math.cos(a), ly = cy+labelR*Math.sin(a);
+    const cosv = Math.cos(a);
+    const anchor = cosv > 0.15 ? 'start' : (cosv < -0.15 ? 'end' : 'middle');
+    return `<text x="${lx}" y="${ly}" text-anchor="${anchor}" dominant-baseline="middle" style="font-size:11px; fill:var(--text-secondary); font-weight:700;">${escapeHtml(s.name)} (${values[s.id]})</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${size} ${size}" width="100%" style="max-width:320px; display:block; margin:0 auto; overflow:visible;">
+    ${gridPolys}${axisLines}
+    <polygon points="${dataPolyStr}" style="fill:color-mix(in srgb, var(--accent) 22%, transparent); stroke:var(--accent); stroke-width:2;"/>
+    ${dataDots}
+    ${labels}
+  </svg>`;
+}
+function statBarRowHtml(c, s, value, interactive){
+  const ratio = s.max>s.min ? Math.max(0, Math.min(1, (value-s.min)/(s.max-s.min))) : 0;
+  return `
+    <div class="stat-row">
+      <div class="stat-row-top">
+        <span class="stat-name">${escapeHtml(s.name)}</span>
+        <span class="stat-val">${value} <span class="muted">/ ${s.max}</span></span>
+      </div>
+      <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${Math.round(ratio*100)}%;"></div></div>
+      ${interactive ? statControlsHtml(c.id, s.id, value, s.min, s.max) : ''}
+    </div>`;
+}
+function statNumberRowHtml(c, s, value, interactive){
+  return `
+    <div class="stat-number-card">
+      <div class="stat-name">${escapeHtml(s.name)}</div>
+      <div class="stat-number-big">${value}</div>
+      <div class="muted">범위 ${s.min} ~ ${s.max}</div>
+      ${interactive ? statControlsHtml(c.id, s.id, value, s.min, s.max) : ''}
+    </div>`;
+}
+function renderStatCategoryBody(c, interactive){
+  const stats = c.stats || [];
+  if(stats.length===0) return `<p class="muted">아직 스텟이 설정되지 않았습니다.</p>`;
+  const values = {};
+  stats.forEach(s=>{ values[s.id] = getStatValue(c.id, s.id); });
+  if(c.statDisplay==='radar'){
+    const radar = renderRadarSVG(c, values);
+    const list = stats.map(s=>`
+      <div class="stat-list-row">
+        <span class="stat-name">${escapeHtml(s.name)}</span>
+        ${interactive ? statControlsHtml(c.id, s.id, values[s.id], s.min, s.max) : `<span class="stat-val">${values[s.id]} / ${s.max}</span>`}
+      </div>`).join('');
+    return `<div class="stat-radar-wrap">${radar}</div><div class="stat-list">${list}</div>`;
+  }
+  if(c.statDisplay==='bar'){
+    return `<div class="stat-bar-list">${stats.map(s=>statBarRowHtml(c,s,values[s.id],interactive)).join('')}</div>`;
+  }
+  return `<div class="stat-number-grid">${stats.map(s=>statNumberRowHtml(c,s,values[s.id],interactive)).join('')}</div>`;
+}
+function renderStatCategoryPlayBlock(c){
+  const spent = computeStatSpent(c);
+  const remaining = c.statBudget - spent;
+  const ratio = c.statBudget>0 ? Math.max(0, Math.min(1, spent/c.statBudget)) : 0;
+  const color = remaining<0 ? 'var(--critical)' : ((c.statBudget>0 && remaining<=c.statBudget*0.15) ? 'var(--warning)' : 'var(--good)');
+  return `
+    <div class="cat-title"><h2>${escapeHtml(c.name)}</h2><span class="pill">스텟 ${spent} / ${c.statBudget}pt</span></div>
+    ${c.image ? `<img src="${escapeHtml(c.image)}" class="cat-banner">` : ''}
+    <div class="stat-mini-meter"><div class="stat-mini-track"><div class="stat-mini-fill" style="width:${Math.round(ratio*100)}%; background:${color};"></div></div></div>
+    ${renderStatCategoryBody(c, true)}
+  `;
+}
+function renderPlay(){
+  const t = state.template;
+  const catsHtml = t.categories.map(c=>{
+    return c.categoryMode==='stat' ? renderStatCategoryPlayBlock(c) : renderSelectCategoryPlayBlock(c);
+  }).join('');
+
+  return `
+    ${meterHtml()}
+    <div class="top-actions" style="margin-bottom:6px;">
+      <button class="btn btn-secondary btn-sm" onclick="goHome(true)">← 처음으로</button>
+      <button class="btn btn-secondary btn-sm" onclick="backToEditorFromPlay()">✏️ 템플릿 편집</button>
+      <button class="btn btn-secondary btn-sm" onclick="resetSelections()">↺ 선택 초기화</button>
+    </div>
+    <h1 style="margin-top:14px;">${escapeHtml(t.title||'캐릭터 만들기')}</h1>
+    ${t.description ? `<p class="lead">${escapeHtml(t.description)}</p>` : ''}
+    <div class="card">
+      <label class="field-label">캐릭터 이름</label>
+      <input type="text" placeholder="이름을 입력하세요" value="${escapeHtml(state.play.characterName)}" oninput="updateCharacterName(this.value)">
+    </div>
+    ${catsHtml}
+    <hr class="hr">
+    <button class="btn btn-primary btn-block" onclick="goSummary()">📋 완성된 캐릭터 시트 보기</button>
+  `;
+}
+
+/* ===================== 요약 ===================== */
+function buildSummaryText(){
+  const t = state.template;
+  const spent = computeSpent();
+  const lines = [];
+  lines.push(`■ ${t.title || '캐릭터 시트'}`);
+  lines.push(`이름: ${state.play.characterName || '(이름 없음)'}`);
+  lines.push(`포인트: ${spent} / ${t.pointBudget} (잔여 ${t.pointBudget - spent})`);
+  lines.push('');
+  t.categories.forEach(c=>{
+    if(c.categoryMode==='stat'){
+      const stats = c.stats || [];
+      if(stats.length===0) return;
+      const statSpent = computeStatSpent(c);
+      lines.push(`[${c.name} - 스텟, ${statSpent} / ${c.statBudget}pt]`);
+      stats.forEach(s=>{
+        lines.push(`- ${s.name}: ${getStatValue(c.id, s.id)} (범위 ${s.min}~${s.max})`);
+      });
+      lines.push('');
+      return;
+    }
+    const sel = state.play.selections[c.id] || [];
+    if(sel.length===0) return;
+    lines.push(`[${c.name}]`);
+    sel.forEach(optId=>{
+      const o = c.options.find(x=>x.id===optId);
+      if(!o) return;
+      const costTxt = o.cost>0 ? `+${o.cost}pt` : `${o.cost}pt`;
+      lines.push(`- ${o.name} (${costTxt})${o.description ? ' : '+o.description : ''}`);
+    });
+    lines.push('');
+  });
+  return lines.join('\n');
+}
+function renderSummary(){
+  const t = state.template;
+  const spent = computeSpent();
+  const remaining = t.pointBudget - spent;
+  const catsHtml = t.categories.map(c=>{
+    if(c.categoryMode==='stat'){
+      const stats = c.stats || [];
+      if(stats.length===0) return '';
+      const statSpent = computeStatSpent(c);
+      return `
+        <div class="sum-cat">
+          <h3>${escapeHtml(c.name)} · 스텟</h3>
+          ${renderStatCategoryBody(c, false)}
+          <div class="stat-sum-row" style="margin-top:8px;">
+            <span class="muted">사용한 스텟 포인트</span>
+            <span style="font-weight:700;">${statSpent} / ${c.statBudget}pt</span>
+          </div>
+        </div>`;
+    }
+    const sel = state.play.selections[c.id] || [];
+    if(sel.length===0) return '';
+    const itemsHtml = sel.map(optId=>{
+      const o = c.options.find(x=>x.id===optId);
+      if(!o) return '';
+      const costTxt = o.cost>0 ? `+${o.cost}pt` : `${o.cost}pt`;
+      const costColor = o.cost>0 ? 'var(--accent)' : (o.cost<0 ? 'var(--success-text)' : 'var(--text-muted)');
+      return `
+        <div class="sum-item">
+          <div class="sum-item-left">
+            ${o.image ? `<img src="${escapeHtml(o.image)}" class="img-thumb-sm">` : ''}
+            <div><div class="n">${escapeHtml(o.name)}</div>${o.description?`<div class="d">${escapeHtml(o.description)}</div>`:''}</div>
+          </div>
+          <div class="c" style="color:${costColor};">${costTxt}</div>
+        </div>`;
+    }).join('');
+    return `<div class="sum-cat"><h3>${escapeHtml(c.name)}</h3>${itemsHtml}</div>`;
+  }).join('') || `<p class="muted">아직 선택한 옵션이 없습니다.</p>`;
+
+  return `
+    <div class="top-actions" style="margin-bottom:14px;">
+      <button class="btn btn-secondary btn-sm" onclick="state.screen='play'; render();">← 선택으로 돌아가기</button>
+      <button class="btn btn-secondary btn-sm" onclick="goHome(true)">🏠 처음으로</button>
+    </div>
+    <div class="card">
+      <h1 style="margin-bottom:2px;">${escapeHtml(state.play.characterName || '이름 없는 캐릭터')}</h1>
+      <p class="muted" style="margin:0 0 14px;">${escapeHtml(t.title)}</p>
+      ${catsHtml}
+      <hr class="hr">
+      <div class="total-row">
+        <span>사용 포인트</span>
+        <span style="color:${remaining<0?'var(--critical)':'var(--text-primary)'};">${spent} / ${t.pointBudget}pt ${remaining<0?`(초과 ${-remaining}pt)`:''}</span>
+      </div>
+    </div>
+    <div class="footer-actions">
+      <button class="btn btn-primary" onclick="copySummary()">📋 텍스트로 복사</button>
+      <button class="btn btn-secondary" onclick="shareCharacterLink()">🔗 캐릭터 공유 링크</button>
+      <button class="btn btn-secondary" onclick="downloadSummaryText()">⬇️ 텍스트 파일 저장</button>
+      <button class="btn btn-secondary" onclick="downloadCharacterJSON()">💾 캐릭터 저장 (.json)</button>
+      <button class="btn btn-ghost" onclick="restartCharacter()">↺ 이 템플릿으로 새 캐릭터 만들기</button>
+    </div>
+  `;
+}
+function copySummary(){
+  const text = buildSummaryText();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>showToast('클립보드에 복사했습니다!')).catch(()=>showToast('복사에 실패했습니다.'));
+  } else {
+    showToast('이 브라우저에서는 복사를 지원하지 않습니다.');
+  }
+}
+function downloadSummaryText(){
+  downloadText(buildSummaryText(), safeFilename(state.play.characterName)+'.txt');
+  showToast('텍스트 파일을 저장했습니다.');
+}
+function downloadCharacterJSON(){
+  downloadJSON({ type:'character', template: state.template, characterName: state.play.characterName, selections: state.play.selections, statValues: state.play.statValues }, safeFilename(state.play.characterName)+'.json');
+  showToast('캐릭터 파일을 저장했습니다.');
+}
+function restartCharacter(){
+  state.play = { characterName:'', selections:{}, statValues:{} };
+  state.screen='play'; render();
+}
+
+/* ===================== 초기화 ===================== */
+(async function init(){
+  await loadFromShareHash();
+  render();
+})();
+</script>
+</body>
+</html>
