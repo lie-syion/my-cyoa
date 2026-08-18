@@ -454,6 +454,75 @@ function cloneTemplate(t){ return JSON.parse(JSON.stringify(t)); }
 function findCat(catId){ return state.template.categories.find(c=>c.id===catId); }
 function findOpt(catId,optId){ const c=findCat(catId); return c && c.options.find(o=>o.id===optId); }
 
+/* ===================== 편집 중인 템플릿 임시 저장(자동 저장) =====================
+   에디터 화면에 있는 동안 주기적으로 브라우저에 자동 저장해서, 실수로 탭을 닫거나
+   새로고침해도 홈 화면에서 "이어서 작성하기"로 복구할 수 있게 합니다.
+   (일부 환경에서는 localStorage 사용이 막혀 있을 수 있어 모두 try/catch로 안전하게 처리) */
+const DRAFT_KEY = 'cyoa_editor_draft_v1';
+let _lastDraftSnapshot = '';
+function safeLSGet(key){ try{ return localStorage.getItem(key); }catch(err){ return null; } }
+function safeLSSet(key,val){ try{ localStorage.setItem(key,val); return true; }catch(err){ return false; } }
+function safeLSRemove(key){ try{ localStorage.removeItem(key); }catch(err){ /* noop */ } }
+function saveDraftNow(){
+  if(!(state.screen==='editor' && state.template)) return;
+  const json = JSON.stringify(state.template);
+  if(json===_lastDraftSnapshot) return;
+  const ok = safeLSSet(DRAFT_KEY, JSON.stringify({ savedAt: Date.now(), template: state.template }));
+  if(ok) _lastDraftSnapshot = json;
+}
+function loadDraft(){
+  const raw = safeLSGet(DRAFT_KEY);
+  if(!raw) return null;
+  try{
+    const data = JSON.parse(raw);
+    if(data && data.template) return data;
+  }catch(err){ /* 손상된 저장본은 무시 */ }
+  return null;
+}
+function clearDraft(){ safeLSRemove(DRAFT_KEY); _lastDraftSnapshot = ''; }
+function draftAgeText(savedAt){
+  const mins = Math.max(0, Math.round((Date.now()-savedAt)/60000));
+  if(mins < 1) return '방금 전';
+  if(mins < 60) return `${mins}분 전`;
+  const hours = Math.round(mins/60);
+  if(hours < 24) return `${hours}시간 전`;
+  return `${Math.round(hours/24)}일 전`;
+}
+function continueDraft(){
+  const d = loadDraft();
+  if(!d){ showToast('불러올 임시 저장본이 없어요.'); return; }
+  state.template = d.template;
+  _lastDraftSnapshot = JSON.stringify(state.template);
+  state.screen='editor'; render();
+}
+function discardDraft(){
+  showConfirm('임시 저장된 템플릿을 완전히 삭제할까요? 이 작업은 되돌릴 수 없어요.', ()=>{
+    clearDraft();
+    showToast('임시 저장본을 삭제했습니다.');
+    if(state.screen==='home') render();
+  });
+}
+function draftHasContent(d){
+  if(!d || !d.template) return false;
+  const t = d.template;
+  return !!((t.title||'').trim() || (t.description||'').trim() || (t.categories||[]).length>0);
+}
+// 새 템플릿을 시작/불러오기 하려는데 기존 임시 저장본(내용이 있는 경우)이 있으면 먼저 확인합니다.
+function guardStartFresh(action){
+  const d = loadDraft();
+  if(draftHasContent(d)){
+    showConfirm('작성 중이던 템플릿(자동 저장됨)이 있어요. 지금 새로 시작하면 그 내용을 이어서 작성할 수 없게 될 수 있어요. 계속할까요?', action);
+  } else {
+    action();
+  }
+}
+setInterval(saveDraftNow, 2000);
+window.addEventListener('beforeunload', function(e){
+  if(state.screen==='editor'){
+    saveDraftNow();
+  }
+});
+
 /* ===================== 공통 유틸 ===================== */
 function showToast(msg){
   const el=document.getElementById('toast');
@@ -660,9 +729,22 @@ function renderHome(){
       </div>`;
   }).join('');
 
+  const draft = loadDraft();
+  const draftCard = draftHasContent(draft) ? `
+    <div class="card" style="border-color:var(--warning);">
+      <h2>✏️ 작성 중이던 템플릿이 있어요</h2>
+      <p class="lead" style="margin-bottom:4px;">${escapeHtml(draft.template.title || '(제목 없음)')} · 자동 저장됨 (${draftAgeText(draft.savedAt)})</p>
+      <p class="muted" style="margin-bottom:14px;">브라우저에 자동 저장되어 있어서, 탭을 닫거나 새로고침해도 이어서 작성할 수 있어요.</p>
+      <div class="row">
+        <button class="btn btn-primary btn-sm" onclick="continueDraft()">▶️ 이어서 작성하기</button>
+        <button class="btn btn-ghost btn-sm" onclick="discardDraft()">🗑 삭제</button>
+      </div>
+    </div>` : '';
+
   return `
     <h1>나만의 CYOA 캐릭터 시트를 만들어보세요</h1>
     <p class="lead">장르와 테마를 자유롭게 정할 수 있는 포인트 예산제 캐릭터 생성 툴입니다. 아래 예시 템플릿으로 바로 시작하거나, 완전히 새로운 템플릿을 직접 설계해보세요.</p>
+    ${draftCard}
 
     <div class="card">
       <h2>새로 만들기</h2>
@@ -687,8 +769,11 @@ function renderHome(){
   `;
 }
 function startNewTemplate(){
-  state.template = { id:uid('tpl'), title:'', description:'', pointBudget:100, allowNegative:false, categories:[] };
-  state.screen='editor'; render();
+  guardStartFresh(()=>{
+    state.template = { id:uid('tpl'), title:'', description:'', pointBudget:100, allowNegative:false, categories:[] };
+    _lastDraftSnapshot = '';
+    state.screen='editor'; render();
+  });
 }
 /* ===================== 커뮤니티 갤러리 ===================== */
 function parseCsv(text){
@@ -836,9 +921,12 @@ function usePreset(key){
   state.screen='play'; render();
 }
 function editPreset(key){
-  state.template = cloneTemplate(PRESETS[key]);
-  state.template.id = uid('tpl');
-  state.screen='editor'; render();
+  guardStartFresh(()=>{
+    state.template = cloneTemplate(PRESETS[key]);
+    state.template.id = uid('tpl');
+    _lastDraftSnapshot = '';
+    state.screen='editor'; render();
+  });
 }
 function importJSONFile(input){
   const file = input.files && input.files[0];
@@ -848,9 +936,12 @@ function importJSONFile(input){
     try{
       const data = JSON.parse(e.target.result);
       if(data.type==='template' && data.template){
-        state.template = data.template;
-        state.screen='editor'; render();
-        showToast('템플릿을 불러왔습니다.');
+        guardStartFresh(()=>{
+          state.template = data.template;
+          _lastDraftSnapshot = '';
+          state.screen='editor'; render();
+          showToast('템플릿을 불러왔습니다.');
+        });
       } else if(data.type==='character' && data.template){
         state.template = data.template;
         state.play = { characterName:data.characterName||'', selections:data.selections||{}, statValues:data.statValues||{} };
@@ -868,7 +959,7 @@ function importJSONFile(input){
 }
 function goHome(confirmNeeded){
   if(confirmNeeded){
-    showConfirm('저장하지 않은 내용은 사라집니다. 처음 화면으로 돌아갈까요?', ()=>{ state.screen='home'; render(); });
+    showConfirm('편집 중인 내용은 자동 저장되어 있어요. 홈 화면의 "이어서 작성하기"로 다시 불러올 수 있어요. 처음 화면으로 돌아갈까요?', ()=>{ saveDraftNow(); state.screen='home'; render(); });
     return;
   }
   state.screen='home'; render();
@@ -881,8 +972,9 @@ function renderEditor(){
     `<p class="muted" style="text-align:center; padding:20px 0;">아직 카테고리가 없습니다. 아래 버튼으로 추가해보세요.</p>`;
 
   return `
-    <div class="top-actions" style="margin-bottom:14px;">
+    <div class="top-actions" style="margin-bottom:14px; justify-content:space-between; display:flex; align-items:center;">
       <button class="btn btn-secondary btn-sm" onclick="goHome(true)">← 처음으로</button>
+      <span class="muted" style="font-size:12px;">💾 편집 내용은 이 브라우저에 자동 저장돼요</span>
     </div>
     <h1>템플릿 편집</h1>
     <p class="lead">카테고리와 옵션, 포인트 비용을 자유롭게 구성하세요. 결함처럼 포인트를 돌려받는 옵션은 비용에 음수를 입력하면 됩니다. 카테고리는 옵션을 고르는 '선택형'과, 별도의 포인트로 능력치를 직접 배분하는 '스텟형' 중에서 고를 수 있어요.</p>
